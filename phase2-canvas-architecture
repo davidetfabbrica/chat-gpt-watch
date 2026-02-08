@@ -1,0 +1,19 @@
+┌─────────────────────────────┐
+│  Live Canvas (on screen)    │  ← redrawn every frame
+│  - hands                    │
+│  - moon rotation            │
+│  - sidereal hand            │
+│  - breathing light pass     │
+└─────────────────────────────┘
+┌─────────────────────────────┐
+│  Static Dial Canvas         │  ← drawn once
+│  - enamel base              │
+│  - guilloché geometry       │
+│  - minute track             │
+│  - applied indices          │
+│  - Roman numerals           │
+│  - logo + subtitle          │
+│  - Swiss Made arc           │
+│  - subdial outlines         │
+│  - date window frame        │
+└─────────────────────────────┘

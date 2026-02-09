@@ -1,263 +1,259 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from "react";
 
-export default function WatchFace() {
+const LUNAR_CYCLE = 29.53059;
+
+export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [gmtOffset, setGmtOffset] = useState(0);
+  const [showOffset, setShowOffset] = useState(false);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") {
+        setGmtOffset((prev) => prev + 1);
+        flashOffset();
+      }
+      if (e.key === "ArrowLeft") {
+        setGmtOffset((prev) => prev - 1);
+        flashOffset();
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
+
+  const flashOffset = () => {
+    setShowOffset(true);
+    setTimeout(() => setShowOffset(false), 1500);
+  };
+
+  // 🌙 Moon phase
+  function getMoonPhaseAngle(date: Date) {
+    const knownNewMoon = new Date(Date.UTC(2000, 0, 6, 18, 14));
+    const daysSince =
+      (date.getTime() - knownNewMoon.getTime()) /
+      (1000 * 60 * 60 * 24);
+
+    const phase = ((daysSince % LUNAR_CYCLE) + LUNAR_CYCLE) % LUNAR_CYCLE;
+    return (phase / LUNAR_CYCLE) * Math.PI * 2;
+  }
+
+  // 🌌 Sidereal time (Greenwich Mean Sidereal Time)
+  function getSiderealAngle(date: Date) {
+    const JD =
+      date.getTime() / 86400000 + 2440587.5;
+
+    const D = JD - 2451545.0;
+
+    let GMST =
+      280.46061837 +
+      360.98564736629 * D;
+
+    GMST = ((GMST % 360) + 360) % 360;
+
+    return (GMST / 360) * Math.PI * 2;
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const size = 500;
     canvas.width = size;
     canvas.height = size;
 
-    const c = size / 2;
-    const r = c - 20;
+    const center = size / 2;
+    const radius = size * 0.45;
 
-    let gmtOffset = 0;
-
-    /* ───────── Dial Base ───────── */
-
-    function drawDialBase() {
-      const radial = ctx.createRadialGradient(c, c, r * 0.15, c, c, r);
-      radial.addColorStop(0, '#f8f7f3');
-      radial.addColorStop(0.65, '#f0efe9');
-      radial.addColorStop(1, '#e3e1d8');
-
-      ctx.fillStyle = radial;
-      ctx.beginPath();
-      ctx.arc(c, c, r, 0, Math.PI * 2);
-      ctx.fill();
-
-      const angle = (Date.now() / 12000) % (Math.PI * 2);
-      const sweep = ctx.createLinearGradient(
-        c + Math.cos(angle) * r,
-        c + Math.sin(angle) * r,
-        c - Math.cos(angle) * r,
-        c - Math.sin(angle) * r
-      );
-
-      sweep.addColorStop(0, 'rgba(255,255,255,0.22)');
-      sweep.addColorStop(0.5, 'rgba(255,255,255,0)');
-      sweep.addColorStop(1, 'rgba(0,0,0,0.1)');
-
-      ctx.fillStyle = sweep;
-      ctx.beginPath();
-      ctx.arc(c, c, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    /* ───────── Minute Track ───────── */
-
-    function drawMinuteTrack() {
-      for (let i = 0; i < 60; i++) {
-        const a = (i * Math.PI) / 30;
-        const isFive = i % 5 === 0;
-
-        ctx.save();
-        ctx.translate(c, c);
-        ctx.rotate(a);
-        ctx.translate(0, -r + 6);
-
-        ctx.strokeStyle = '#222';
-        ctx.lineWidth = isFive ? 2 : 1;
-
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(0, isFive ? 10 : 6);
-        ctx.stroke();
-
-        ctx.restore();
-      }
-    }
-
-    /* ───────── Indices ───────── */
-
-    function drawIndices() {
-      for (let i = 0; i < 12; i++) {
-        const a = (i * Math.PI) / 6;
-
-        ctx.save();
-        ctx.translate(c, c);
-        ctx.rotate(a);
-        ctx.translate(0, -r + 18);
-
-        const w = 5;
-        const h = 18;
-
-        ctx.fillStyle = '#d4af37';
-        ctx.fillRect(-w / 2, 0, w, h);
-
-        const glint = ctx.createLinearGradient(0, 0, 0, h);
-        glint.addColorStop(0, 'rgba(255,255,255,0.9)');
-        glint.addColorStop(0.5, 'rgba(255,255,255,0)');
-        glint.addColorStop(1, 'rgba(0,0,0,0.35)');
-
-        ctx.fillStyle = glint;
-        ctx.fillRect(-w / 2, 0, w, h);
-
-        ctx.restore();
-      }
-    }
-
-    /* ───────── Hands ───────── */
-
-    function drawHands(date: Date) {
-      const h = date.getHours() % 12;
-      const m = date.getMinutes();
-      const s = date.getSeconds();
-
-      const hourAngle = ((h + m / 60) * Math.PI) / 6;
-      const minAngle = ((m + s / 60) * Math.PI) / 30;
-      const secAngle = (s * Math.PI) / 30;
-      const gmtAngle = (((date.getUTCHours() + gmtOffset) % 24) * Math.PI) / 12;
-
-      function hand(angle: number, len: number, w: number, col: string) {
-        ctx.save();
-        ctx.translate(c, c);
-        ctx.rotate(angle - Math.PI / 2);
-        ctx.strokeStyle = col;
-        ctx.lineWidth = w;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(-10, 0);
-        ctx.lineTo(len, 0);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      hand(hourAngle, r * 0.45, 6, '#000');
-      hand(minAngle, r * 0.7, 4, '#000');
-      hand(secAngle, r * 0.75, 2, '#c00');
-      hand(gmtAngle, r * 0.6, 3, '#0a2d5e');
-    }
-
-    /* ───────── Date Window ───────── */
-
-    function drawDate(date: Date) {
-      const x = c + r * 0.45;
-      const y = c - 18;
-      const w = 46;
-      const h = 28;
-
-      ctx.fillStyle = '#fff';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeRect(x, y, w, h);
-
-      ctx.fillStyle = '#0a2d5e';
-      ctx.font = '18px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(date.getDate().toString(), x + w / 2, y + h / 2 + 1);
-    }
-
-    /* ───────── Moon Phase ───────── */
-
-    function drawMoon(date: Date) {
-      const phase =
-        ((date.getTime() / 1000 / 86400 + 4.867) % 29.53) / 29.53;
-
-      const mx = c;
-      const my = c + r * 0.45;
-      const mr = 30;
-
-      ctx.strokeStyle = '#111';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(mx, my, mr + 2, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = '#0a2d5e';
-      ctx.beginPath();
-      ctx.arc(mx, my, mr, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#d4af37';
-      ctx.beginPath();
-      ctx.arc(mx - mr * (1 - 2 * phase), my, mr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    /* ───────── Sidereal Subdial ───────── */
-
-    function drawSidereal(date: Date) {
-      const gst =
-        ((date.getUTCHours() +
-          date.getUTCMinutes() / 60 +
-          date.getUTCSeconds() / 3600) *
-          1.0027379) %
-        24;
-
-      const angle = (gst * Math.PI) / 12;
-
-      const sx = c - r * 0.45;
-      const sy = c;
-
-      ctx.strokeStyle = '#111';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 40, 0, Math.PI * 2);
-      ctx.stroke();
-
+    function drawHand(
+      angle: number,
+      length: number,
+      width: number,
+      color: string
+    ) {
       ctx.save();
-      ctx.translate(sx, sy);
+      ctx.translate(center, center);
       ctx.rotate(angle - Math.PI / 2);
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(30, 0);
+      ctx.lineTo(length, 0);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = "round";
       ctx.stroke();
       ctx.restore();
     }
 
-    function drawText() {
-      ctx.fillStyle = '#0a2d5e';
-      ctx.font = '20px serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('David Turner', c, c - r * 0.3);
+    function drawMoonPhase(date: Date) {
+      const r = radius * 0.22;
+      const y = center + radius * 0.55;
+
+      ctx.beginPath();
+      ctx.arc(center, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#0b1d3a";
+      ctx.fill();
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const angle = getMoonPhaseAngle(date);
+
+      ctx.save();
+      ctx.translate(center, y);
+      ctx.rotate(angle);
+
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.6, r * 0.45, 0, Math.PI * 2);
+      ctx.fillStyle = "#d4af37";
+      ctx.fill();
+
+      ctx.strokeStyle = "#8b7500";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.6, r * 0.25, 0, Math.PI);
+      ctx.stroke();
+
+      ctx.restore();
     }
 
-    function render() {
+    function drawSidereal(date: Date) {
+      const r = radius * 0.22;
+      const x = center - radius * 0.55;
+      const y = center;
+
+      // Subdial
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#f0efe8";
+      ctx.fill();
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 24h markers
+      for (let i = 0; i < 24; i += 6) {
+        const a = (i * Math.PI) / 12 - Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(
+          x + Math.cos(a) * r * 0.8,
+          y + Math.sin(a) * r * 0.8
+        );
+        ctx.lineTo(
+          x + Math.cos(a) * r * 0.95,
+          y + Math.sin(a) * r * 0.95
+        );
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Hand
+      const angle = getSiderealAngle(date);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle - Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(r * 0.7, 0);
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+
+      // Label
+      ctx.fillStyle = "#444";
+      ctx.font = "10px serif";
+      ctx.textAlign = "center";
+      ctx.fillText("SIDEREAL", x, y + r + 14);
+    }
+
+    function drawWatch() {
       ctx.clearRect(0, 0, size, size);
+
+      // Dial
+      ctx.beginPath();
+      ctx.arc(center, center, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#f5f5f0";
+      ctx.fill();
+      ctx.strokeStyle = "#222";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Hour markers
+      for (let i = 0; i < 12; i++) {
+        const angle = (i * Math.PI) / 6 - Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(
+          center + Math.cos(angle) * radius * 0.85,
+          center + Math.sin(angle) * radius * 0.85
+        );
+        ctx.lineTo(
+          center + Math.cos(angle) * radius * 0.95,
+          center + Math.sin(angle) * radius * 0.95
+        );
+        ctx.strokeStyle = "#111";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+
       const now = new Date();
+      const seconds =
+        now.getSeconds() + now.getMilliseconds() / 1000;
+      const minutes = now.getMinutes() + seconds / 60;
+      const hours = (now.getHours() % 12) + minutes / 60;
+      const gmtHours =
+        (now.getHours() + gmtOffset + minutes / 60) % 24;
 
-      drawDialBase();
-      drawMinuteTrack();
-      drawIndices();
-      drawText();
-      drawDate(now);
-      drawMoon(now);
+      drawMoonPhase(now);
       drawSidereal(now);
-      drawHands(now);
 
-      requestAnimationFrame(render);
+      drawHand((hours * Math.PI) / 6, radius * 0.5, 8, "#111");
+      drawHand((minutes * Math.PI) / 30, radius * 0.7, 5, "#111");
+      drawHand(
+        (gmtHours * Math.PI) / 12,
+        radius * 0.65,
+        4,
+        "#1f3a5f"
+      );
+      drawHand(
+        (seconds * Math.PI) / 30,
+        radius * 0.75,
+        2,
+        "#b00020"
+      );
+
+      ctx.beginPath();
+      ctx.arc(center, center, 6, 0, Math.PI * 2);
+      ctx.fillStyle = "#111";
+      ctx.fill();
     }
 
-    window.addEventListener('keydown', e => {
-      if (e.key === 'ArrowRight') gmtOffset++;
-      if (e.key === 'ArrowLeft') gmtOffset--;
-    });
+    let animationId: number;
+    const animate = () => {
+      drawWatch();
+      animationId = requestAnimationFrame(animate);
+    };
 
-    render();
-  }, []);
+    animate();
+    return () => cancelAnimationFrame(animationId);
+  }, [gmtOffset]);
 
   return (
-    <div
-      style={{
-        background: '#111',
-        height: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <canvas ref={canvasRef} />
-    </div>
+    <main className="relative flex min-h-screen items-center justify-center bg-neutral-900">
+      <canvas ref={canvasRef} className="rounded-full shadow-2xl" />
+
+      {showOffset && (
+        <div className="absolute bottom-10 text-sm text-neutral-300 tracking-wide">
+          GMT: UTC{gmtOffset >= 0 ? "+" : ""}
+          {gmtOffset}
+        </div>
+      )}
+    </main>
   );
 }

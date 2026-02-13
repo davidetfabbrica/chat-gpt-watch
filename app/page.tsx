@@ -18,7 +18,8 @@ export default function Home() {
   }, []);
 
   function getMoonPhaseAngle(date: Date) {
-    const ref = new Date(Date.UTC(2000, 0, 6, 18, 14));
+    // Using January 19, 2026 as new moon reference
+    const ref = new Date(Date.UTC(2026, 0, 19, 0, 0));
     const days = (date.getTime() - ref.getTime()) / (1000 * 60 * 60 * 24);
     const phase = ((days % LUNAR_CYCLE) + LUNAR_CYCLE) % LUNAR_CYCLE;
     return (phase / LUNAR_CYCLE) * Math.PI * 2;
@@ -29,7 +30,13 @@ export default function Home() {
     const D = JD - 2451545.0;
     let GMST = 280.46061837 + 360.98564736629 * D;
     GMST = ((GMST % 360) + 360) % 360;
-    return (GMST / 360) * Math.PI * 2;
+    
+    // Convert to Local Sidereal Time for UK (longitude ~0°)
+    // For London specifically: 0.1278° W = -0.1278
+    const longitude = -0.1278; // Greenwich, UK
+    const LST = GMST + longitude;
+    
+    return (LST / 360) * Math.PI * 2;
   }
 
   useEffect(() => {
@@ -106,7 +113,7 @@ export default function Home() {
         ctx.beginPath();
         ctx.moveTo(c + Math.cos(a) * inner, c + Math.sin(a) * inner);
         ctx.lineTo(c + Math.cos(a) * outer, c + Math.sin(a) * outer);
-        ctx.strokeStyle = "#222";
+        ctx.strokeStyle = "#f5f5f0"; // Off-white color for visibility on dark dial
         ctx.lineWidth = i % 5 === 0 ? 2 : 1;
         ctx.stroke();
       }
@@ -116,6 +123,7 @@ export default function Home() {
       const outerRadius = r * 0.88; // Consistent outer radius for all batons
       const normalBatonLength = 20;
       const shortBatonLength = 12; // Shorter for positions with subdials/date
+      const time = Date.now() / 1000;
       
       for (let i = 0; i < 12; i++) {
         const a = (i * Math.PI) / 6 - Math.PI / 2;
@@ -128,13 +136,49 @@ export default function Home() {
         
         const outer = outerRadius;
         const inner = outer - batonLength;
+        
+        // Calculate perpendicular angle for gradient (across the width)
+        const perpAngle = a + Math.PI / 2;
+        const gradOffset = 2.5; // Half the lineWidth
+        
+        // Create gradient perpendicular to baton for beveled metallic effect
+        const x1 = c + Math.cos(a) * ((inner + outer) / 2) + Math.cos(perpAngle) * gradOffset;
+        const y1 = c + Math.sin(a) * ((inner + outer) / 2) + Math.sin(perpAngle) * gradOffset;
+        const x2 = c + Math.cos(a) * ((inner + outer) / 2) - Math.cos(perpAngle) * gradOffset;
+        const y2 = c + Math.sin(a) * ((inner + outer) / 2) - Math.sin(perpAngle) * gradOffset;
+        
+        const batonGradient = ctx.createLinearGradient(x1, y1, x2, y2);
+        batonGradient.addColorStop(0, "#a87d45");    // Dark edge
+        batonGradient.addColorStop(0.3, "#d4a574");  // Rose gold
+        batonGradient.addColorStop(0.5, "#f0d4c3");  // Bright center highlight
+        batonGradient.addColorStop(0.7, "#d4a574");  // Rose gold
+        batonGradient.addColorStop(1, "#8f6a3a");    // Dark edge
+        
         ctx.beginPath();
         ctx.moveTo(c + Math.cos(a) * inner, c + Math.sin(a) * inner);
         ctx.lineTo(c + Math.cos(a) * outer, c + Math.sin(a) * outer);
-        ctx.strokeStyle = "#c9a24d";
+        ctx.strokeStyle = batonGradient;
         ctx.lineWidth = 5;
         ctx.lineCap = "square";
         ctx.stroke();
+        
+        // Add occasional sparkle to each baton - very slow and subtle
+        const sparkle = Math.sin(time * 0.25 + i * 1.3) * 0.5 + 0.5;
+        if (sparkle > 0.88) {
+          const sparklePos = (inner + outer) / 2;
+          const sx = c + Math.cos(a) * sparklePos;
+          const sy = c + Math.sin(a) * sparklePos;
+          const intensity = (sparkle - 0.88) * 8;
+          
+          ctx.fillStyle = `rgba(255, 255, 255, ${intensity})`;
+          // Cross sparkle
+          ctx.save();
+          ctx.translate(sx, sy);
+          ctx.rotate(a + Math.PI / 2);
+          ctx.fillRect(-2, -0.5, 4, 1);
+          ctx.fillRect(-0.5, -2, 1, 4);
+          ctx.restore();
+        }
       }
     }
 
@@ -146,6 +190,14 @@ export default function Home() {
       const pommeRadius = 12;
       const pommePosition = len * 0.75; // Pomme positioned 75% along the hand
       
+      // Create metallic rose gold gradient (perpendicular to hand for beveled effect)
+      const handGradient = ctx.createLinearGradient(0, -4, 0, 4);
+      handGradient.addColorStop(0, "#c89968");    // Darker rose gold edge
+      handGradient.addColorStop(0.25, "#F0D4C3"); // Main rose gold
+      handGradient.addColorStop(0.5, "#fae8d8");  // Bright highlight center
+      handGradient.addColorStop(0.75, "#F0D4C3"); // Main rose gold
+      handGradient.addColorStop(1, "#b88958");    // Darker rose gold edge
+      
       // Draw tapered hand shaft from center to pomme edge (no gap)
       ctx.beginPath();
       ctx.moveTo(0, -3.5);
@@ -153,7 +205,7 @@ export default function Home() {
       ctx.lineTo(pommePosition - pommeRadius, 1.8);
       ctx.lineTo(0, 3.5);
       ctx.closePath();
-      ctx.fillStyle = col;
+      ctx.fillStyle = handGradient;
       ctx.fill();
       
       // Continue shaft from pomme edge to tip (no gap)
@@ -163,15 +215,47 @@ export default function Home() {
       ctx.lineTo(len, 0.4);
       ctx.lineTo(pommePosition + pommeRadius, 1.2);
       ctx.closePath();
-      ctx.fillStyle = col;
+      ctx.fillStyle = handGradient;
       ctx.fill();
       
-      // Draw hollow pomme (open circle) on top of shafts
+      // Draw hollow pomme (open circle) with gradient stroke
       ctx.beginPath();
       ctx.arc(pommePosition, 0, pommeRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = col;
+      
+      // Gradient for pomme circle
+      const pommeGradient = ctx.createLinearGradient(
+        pommePosition, -pommeRadius,
+        pommePosition, pommeRadius
+      );
+      pommeGradient.addColorStop(0, "#c89968");
+      pommeGradient.addColorStop(0.5, "#fae8d8");
+      pommeGradient.addColorStop(1, "#b88958");
+      
+      ctx.strokeStyle = pommeGradient;
       ctx.lineWidth = 2.5;
       ctx.stroke();
+      
+      // Add occasional sparkles at key points on the hand shaft
+      const time = Date.now() / 1000;
+      // Much slower, irregular sparkle with different frequencies
+      const sparkle1 = Math.max(0, Math.sin(time * 0.4 + angle * 3.7) * 0.5 + 0.5);
+      const sparkle2 = Math.max(0, Math.sin(time * 0.3 + angle * 5.1 + 2.5) * 0.5 + 0.5);
+      
+      // Sparkle on first shaft section (before pomme)
+      if (sparkle1 > 0.85) {
+        const sparklePos = pommePosition * 0.4; // On the shaft before pomme
+        ctx.fillStyle = `rgba(255, 255, 255, ${(sparkle1 - 0.85) * 6})`;
+        ctx.fillRect(sparklePos - 1, -0.5, 2, 1);
+        ctx.fillRect(sparklePos - 0.5, -1, 1, 2);
+      }
+      
+      // Sparkle on second shaft section (after pomme)
+      if (sparkle2 > 0.85) {
+        const sparklePos = pommePosition + pommeRadius + (len - pommePosition - pommeRadius) * 0.5;
+        ctx.fillStyle = `rgba(255, 255, 255, ${(sparkle2 - 0.85) * 6})`;
+        ctx.fillRect(sparklePos - 1, -0.5, 2, 1);
+        ctx.fillRect(sparklePos - 0.5, -1, 1, 2);
+      }
 
       ctx.restore();
     }
@@ -184,19 +268,43 @@ export default function Home() {
       ctx.translate(c, c);
       ctx.rotate(angle - Math.PI / 2);
 
-      // Thin shaft with counterbalance
+      // Metallic rose gold gradient for seconds hand
+      const secondsGradient = ctx.createLinearGradient(0, -1, 0, 1);
+      secondsGradient.addColorStop(0, "#c89968");
+      secondsGradient.addColorStop(0.5, "#fae8d8");
+      secondsGradient.addColorStop(1, "#b88958");
+
+      // Thin shaft with counterbalance - rose gold gradient
       ctx.beginPath();
       ctx.moveTo(-r * 0.15, 0);
       ctx.lineTo(len, 0);
-      ctx.strokeStyle = "#0b2a5a";
+      ctx.strokeStyle = secondsGradient;
       ctx.lineWidth = 1.5;
       ctx.stroke();
       
-      // Counterbalance circle at bottom end
+      // Counterbalance circle at bottom end - with radial gradient
+      const counterbalanceGrad = ctx.createRadialGradient(
+        -r * 0.15, 0, 0,
+        -r * 0.15, 0, counterbalanceRadius
+      );
+      counterbalanceGrad.addColorStop(0, "#fae8d8");
+      counterbalanceGrad.addColorStop(0.6, "#F0D4C3");
+      counterbalanceGrad.addColorStop(1, "#b88958");
+      
       ctx.beginPath();
       ctx.arc(-r * 0.15, 0, counterbalanceRadius, 0, Math.PI * 2);
-      ctx.fillStyle = "#0b2a5a";
+      ctx.fillStyle = counterbalanceGrad;
       ctx.fill();
+      
+      // Add very subtle, slow sparkle that follows the hand
+      const time = Date.now() / 1000;
+      const sparkle = Math.sin(time * 0.5 + angle * 1.7) * 0.5 + 0.5;
+      if (sparkle > 0.88) {
+        const sparklePos = len * 0.7;
+        ctx.fillStyle = `rgba(255, 255, 255, ${(sparkle - 0.88) * 8})`;
+        ctx.fillRect(sparklePos - 1, -0.5, 2, 1);
+        ctx.fillRect(sparklePos - 0.5, -1, 1, 2);
+      }
 
       ctx.restore();
     }
@@ -245,24 +353,43 @@ export default function Home() {
       ctx.fillStyle = "#0b1d3a";
       ctx.fillRect(c - rr, y - rr, rr * 2, rr * 2);
       
-      // Add twinkling stars
+      // Add twinkling stars with animated glow
       ctx.translate(c, y);
       const starPositions = [
-        { x: -rr * 0.6, y: -rr * 0.4 },
-        { x: rr * 0.7, y: -rr * 0.5 },
-        { x: -rr * 0.5, y: rr * 0.6 },
-        { x: rr * 0.5, y: rr * 0.3 },
-        { x: -rr * 0.2, y: -rr * 0.7 },
-        { x: rr * 0.3, y: -rr * 0.2 },
+        { x: -rr * 0.6, y: -rr * 0.4, phase: 0 },
+        { x: rr * 0.7, y: -rr * 0.5, phase: 1 },
+        { x: -rr * 0.5, y: rr * 0.6, phase: 2 },
+        { x: rr * 0.5, y: rr * 0.3, phase: 3 },
+        { x: -rr * 0.2, y: -rr * 0.7, phase: 4 },
+        { x: rr * 0.3, y: -rr * 0.2, phase: 5 },
       ];
       
+      const time = Date.now() / 1000;
+      
       starPositions.forEach(star => {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(star.x - 0.5, star.y - 0.5, 1, 1);
+        // Each star twinkles at different rate based on phase
+        const twinkle = Math.sin(time * 2 + star.phase * Math.PI / 3) * 0.5 + 0.5;
+        const brightness = 0.6 + twinkle * 0.4; // 0.6 to 1.0
+        const size = 0.8 + twinkle * 0.7; // Variable size
+        
+        // Outer glow
+        const glowGradient = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, size * 2);
+        glowGradient.addColorStop(0, `rgba(255, 255, 255, ${brightness})`);
+        glowGradient.addColorStop(0.5, `rgba(200, 220, 255, ${brightness * 0.3})`);
+        glowGradient.addColorStop(1, "rgba(200, 220, 255, 0)");
+        
+        ctx.fillStyle = glowGradient;
+        ctx.fillRect(star.x - size * 2, star.y - size * 2, size * 4, size * 4);
+        
+        // Bright center with cross shape for sparkle
+        ctx.fillStyle = `rgba(255, 255, 255, ${brightness})`;
+        ctx.fillRect(star.x - size * 0.6, star.y - size * 0.15, size * 1.2, size * 0.3);
+        ctx.fillRect(star.x - size * 0.15, star.y - size * 0.6, size * 0.3, size * 1.2);
       });
       
       // Get moon age in days
-      const ref = new Date(Date.UTC(2000, 0, 6, 18, 14)); // New Moon reference
+      // Using January 19, 2026 as new moon reference (next new moon is Feb 17, 2026)
+      const ref = new Date(Date.UTC(2026, 0, 19, 0, 0)); // New Moon on Jan 19, 2026
       const days = (date.getTime() - ref.getTime()) / (1000 * 60 * 60 * 24);
       const moonAge = ((days % LUNAR_CYCLE) + LUNAR_CYCLE) % LUNAR_CYCLE;
       
@@ -371,66 +498,22 @@ export default function Home() {
       const rr = r * 0.23;
       const x = c - r * 0.55;
 
-      // Subdial background
+      // Subdial background - same blue gradient as main dial
+      const siderealGradient = ctx.createRadialGradient(x, c, 0, x, c, rr);
+      siderealGradient.addColorStop(0, "#1a2a4a");
+      siderealGradient.addColorStop(0.7, "#0f1a35");
+      siderealGradient.addColorStop(1, "#0a0f20");
+      
       ctx.beginPath();
       ctx.arc(x, c, rr, 0, Math.PI * 2);
-      ctx.fillStyle = "#f5f5f0";
+      ctx.fillStyle = siderealGradient;
       ctx.fill();
-      ctx.strokeStyle = "#111";
+      ctx.strokeStyle = "#F0D4C3"; // Rose gold outline
       ctx.lineWidth = 2;
       ctx.stroke();
-      
-      // Guilloche pattern for sidereal subdial
-      ctx.save();
-      ctx.translate(x, c);
-      
-      // Create clipping region
-      ctx.beginPath();
-      ctx.arc(0, 0, rr * 0.9, 0, Math.PI * 2);
-      ctx.clip();
-      
-      const circleRadius = rr * 0.035; // Fine pattern
-      const spacing = circleRadius * 1.8;
-      const rows = Math.ceil(rr * 2.5 / spacing);
-      const cols = Math.ceil(rr * 2.5 / spacing);
-      
-      for (let row = -rows; row <= rows; row++) {
-        for (let col = -cols; col <= cols; col++) {
-          const dx = col * spacing;
-          const dy = row * spacing;
-          
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < rr * 0.9) {
-            ctx.beginPath();
-            ctx.arc(dx, dy, circleRadius, 0, Math.PI * 2);
-            
-            // Directional shimmer effect
-            const angle = Math.atan2(dy, dx);
-            const shimmerPhase = Math.sin(Date.now() / 2000 + angle * 2) * 0.5 + 0.5;
-            const directionalBreathe = breathe * 0.3 + shimmerPhase * 0.15;
-            
-            const baseOpacity = 0.025;
-            ctx.strokeStyle = `rgba(0,0,0,${baseOpacity + directionalBreathe * 0.03})`;
-            ctx.lineWidth = 0.25;
-            ctx.stroke();
-          }
-        }
-      }
-      
-      ctx.restore();
-      
-      // Outer circle marking guilloche edge
-      ctx.save();
-      ctx.translate(x, c);
-      ctx.beginPath();
-      ctx.arc(0, 0, rr * 0.9, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(0,0,0,0.15)";
-      ctx.lineWidth = 0.4;
-      ctx.stroke();
-      ctx.restore();
 
-      // Draw numerals at 12, 3, 6, 9
-      ctx.fillStyle = "#111";
+      // Draw numerals at 12, 3, 6, 9 - rose gold
+      ctx.fillStyle = "#F0D4C3";
       ctx.font = "12px serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -444,14 +527,21 @@ export default function Home() {
       // 9 (left)
       ctx.fillText("9", x - rr * 0.65, c);
 
-      // Hand
+      // Hand - rose gold with metallic gradient
       ctx.save();
       ctx.translate(x, c);
       ctx.rotate(getSiderealAngle(date) - Math.PI / 2);
+      
+      // Create gradient for sidereal hand
+      const siderealHandGrad = ctx.createLinearGradient(0, -1, 0, 1);
+      siderealHandGrad.addColorStop(0, "#c89968");
+      siderealHandGrad.addColorStop(0.5, "#fae8d8");
+      siderealHandGrad.addColorStop(1, "#b88958");
+      
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(rr * 0.55, 0);
-      ctx.strokeStyle = "#111";
+      ctx.strokeStyle = siderealHandGrad;
       ctx.lineWidth = 2;
       ctx.lineCap = "round";
       ctx.stroke();
@@ -462,18 +552,78 @@ export default function Home() {
       const w = r * 0.3;
       const h = r * 0.2;
       const x = c + r * 0.55 - w / 2;
-
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(x, c - h / 2, w, h);
-      ctx.strokeStyle = "#e5e4e2"; // Platinum outline
+      const centerY = c;
+      
+      // Trapezoidal shape - left edge shorter than right edge, tapering toward center
+      const leftHeight = h * 0.7;  // Left edge shorter
+      const rightHeight = h;        // Right edge full height
+      
+      // Dark blue background (same as dial)
+      ctx.beginPath();
+      ctx.moveTo(x, centerY - leftHeight / 2);        // Top left
+      ctx.lineTo(x + w, centerY - rightHeight / 2);   // Top right
+      ctx.lineTo(x + w, centerY + rightHeight / 2);   // Bottom right
+      ctx.lineTo(x, centerY + leftHeight / 2);        // Bottom left
+      ctx.closePath();
+      ctx.fillStyle = "#0f1a35";
+      ctx.fill();
+      
+      // Inner shadows for depth on top and left edges
+      ctx.save();
+      
+      // Top edge shadow
+      const topShadow = ctx.createLinearGradient(
+        x + w/2, centerY - rightHeight / 2,
+        x + w/2, centerY - rightHeight / 2 + 8
+      );
+      topShadow.addColorStop(0, "rgba(0, 0, 0, 0.5)");
+      topShadow.addColorStop(1, "rgba(0, 0, 0, 0)");
+      
+      ctx.beginPath();
+      ctx.moveTo(x, centerY - leftHeight / 2);
+      ctx.lineTo(x + w, centerY - rightHeight / 2);
+      ctx.lineTo(x + w, centerY - rightHeight / 2 + 8);
+      ctx.lineTo(x, centerY - leftHeight / 2 + 6);
+      ctx.closePath();
+      ctx.fillStyle = topShadow;
+      ctx.fill();
+      
+      // Left edge shadow
+      const leftShadow = ctx.createLinearGradient(
+        x, centerY,
+        x + 6, centerY
+      );
+      leftShadow.addColorStop(0, "rgba(0, 0, 0, 0.4)");
+      leftShadow.addColorStop(1, "rgba(0, 0, 0, 0)");
+      
+      ctx.beginPath();
+      ctx.moveTo(x, centerY - leftHeight / 2);
+      ctx.lineTo(x + 6, centerY - leftHeight / 2 + 3);
+      ctx.lineTo(x + 6, centerY + leftHeight / 2 - 3);
+      ctx.lineTo(x, centerY + leftHeight / 2);
+      ctx.closePath();
+      ctx.fillStyle = leftShadow;
+      ctx.fill();
+      
+      ctx.restore();
+      
+      // Rose gold outline - draw AFTER shadows
+      ctx.beginPath();
+      ctx.moveTo(x, centerY - leftHeight / 2);        // Top left
+      ctx.lineTo(x + w, centerY - rightHeight / 2);   // Top right
+      ctx.lineTo(x + w, centerY + rightHeight / 2);   // Bottom right
+      ctx.lineTo(x, centerY + leftHeight / 2);        // Bottom left
+      ctx.closePath();
+      ctx.strokeStyle = "#F0D4C3";
       ctx.lineWidth = 2;
-      ctx.strokeRect(x, c - h / 2, w, h);
+      ctx.stroke();
 
-      ctx.fillStyle = "#020047";
+      // Rose gold date number
+      ctx.fillStyle = "#F0D4C3";
       ctx.font = "28px 'Palatino Linotype', serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(date.getDate().toString(), x + w / 2, c);
+      ctx.fillText(date.getDate().toString(), x + w / 2, centerY);
     }
 
     function drawSwissMade() {
@@ -483,7 +633,7 @@ export default function Home() {
       
       ctx.save();
       ctx.translate(c, c);
-      ctx.font = "9px serif"; // Smaller font (was 11px)
+      ctx.font = "8px serif"; // Reduced to 8px
       ctx.fillStyle = "#e5e4e2"; // Platinum color
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -552,8 +702,8 @@ export default function Home() {
       drawMinuteTrack();
       drawBatons();
 
-      // Roman numerals at hour positions - platinum for contrast
-      ctx.fillStyle = "#e5e4e2";
+      // Roman numerals at hour positions - rose gold for contrast
+      ctx.fillStyle = "#F0D4C3";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       
@@ -581,12 +731,12 @@ export default function Home() {
         ctx.fillText(text, x, y);
       });
 
-      // Brand text - platinum
-      ctx.fillStyle = "#e5e4e2";
+      // Brand text - higher up, top edge just above 10 and 2 numerals
+      ctx.fillStyle = "#e5e4e2"; // Platinum
       ctx.font = "18px serif";
-      ctx.fillText("David Turner", c, c - r * 0.25);
+      ctx.fillText("David Turner", c, c - r * 0.48);
       ctx.font = "14px serif";
-      ctx.fillText("Horology", c, c - r * 0.18);
+      ctx.fillText("Horology", c, c - r * 0.40);
 
       drawSwissMade();
 
@@ -603,8 +753,8 @@ export default function Home() {
 
       // Draw hands (largest to smallest)
       drawGMTHand((g * Math.PI) / 12);
-      drawBreguetHand((h * Math.PI) / 6, r * 0.5, "#e5e4e2"); // Platinum hour hand
-      drawBreguetHand((m * Math.PI) / 30, r * 0.7, "#e5e4e2"); // Platinum minute hand
+      drawBreguetHand((h * Math.PI) / 6, r * 0.5, "#F0D4C3"); // Rose gold hour hand
+      drawBreguetHand((m * Math.PI) / 30, r * 0.7, "#F0D4C3"); // Rose gold minute hand
       drawSecondsHand((s * Math.PI) / 30);
 
       // Center pin
@@ -630,10 +780,22 @@ export default function Home() {
     }
     
     function drawCrystal(breathe: number) {
-      // Sapphire crystal reflection - very subtle
+      // Sapphire crystal dome - very subtle layers
       ctx.save();
       
-      // Curved reflection across the crystal
+      // 1. Subtle edge highlight (dome curvature catching light at periphery)
+      const edgeGradient = ctx.createRadialGradient(c, c, r * 0.85, c, c, r);
+      edgeGradient.addColorStop(0, "rgba(255, 255, 255, 0)");
+      edgeGradient.addColorStop(0.7, "rgba(255, 255, 255, 0)");
+      edgeGradient.addColorStop(0.85, "rgba(255, 255, 255, 0.04)");
+      edgeGradient.addColorStop(1, "rgba(255, 255, 255, 0.08)");
+      
+      ctx.beginPath();
+      ctx.arc(c, c, r, 0, Math.PI * 2);
+      ctx.fillStyle = edgeGradient;
+      ctx.fill();
+      
+      // 2. Curved reflection across the crystal (main highlight)
       const reflectionGradient = ctx.createLinearGradient(
         c - r * 0.6, 
         c - r * 0.8, 
@@ -655,8 +817,28 @@ export default function Home() {
       ctx.arc(c, c, r, 0, Math.PI * 2);
       ctx.clip();
       
-      // Draw reflection arc
+      // Draw main reflection arc
       ctx.fillStyle = reflectionGradient;
+      ctx.fillRect(c - r, c - r, r * 2, r * 2);
+      
+      // 3. Very subtle AR coating shimmer (anti-reflective coating effect)
+      // Slight blue/purple tint that shifts
+      const arTint = Math.sin(Date.now() / 5000) * 0.5 + 0.5;
+      const arGradient = ctx.createRadialGradient(c - r * 0.3, c - r * 0.3, 0, c, c, r);
+      arGradient.addColorStop(0, `rgba(100, 150, 255, ${0.015 + arTint * 0.01})`);
+      arGradient.addColorStop(0.4, `rgba(150, 100, 255, ${0.01 + arTint * 0.008})`);
+      arGradient.addColorStop(1, "rgba(100, 150, 255, 0)");
+      
+      ctx.fillStyle = arGradient;
+      ctx.fillRect(c - r, c - r, r * 2, r * 2);
+      
+      // 4. Dome center - very subtle radial gradient suggesting curvature
+      const domeGradient = ctx.createRadialGradient(c - r * 0.2, c - r * 0.2, 0, c, c, r * 0.6);
+      domeGradient.addColorStop(0, "rgba(255, 255, 255, 0.03)");
+      domeGradient.addColorStop(0.5, "rgba(255, 255, 255, 0.01)");
+      domeGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+      
+      ctx.fillStyle = domeGradient;
       ctx.fillRect(c - r, c - r, r * 2, r * 2);
       
       ctx.restore();

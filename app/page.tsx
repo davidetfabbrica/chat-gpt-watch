@@ -23,38 +23,49 @@ export default function Home() {
 
   // Load moon phase images on mount
   useEffect(() => {
+    console.log('Starting to load moon phase images...');
+    
     const moonPhaseFiles = [
-      'New_Moon.svg',
-      'Waxing_Crescent.svg',
-      'First_Quarter.svg',
-      'Waxing_Gibbous.svg',
-      'Full_Moon.svg',
-      'Waning_Gibbous.svg',
-      'Last_Quarter.svg',
-      'Waning_Crescent.svg'
+      '/New_Moon.svg',
+      '/Waxing_Crescent.svg',
+      '/First_Quarter.svg',
+      '/Waxing_Gibbous.svg',
+      '/Full_Moon.svg',
+      '/Waning_Gibbous.svg',
+      '/Last_Quarter.svg',
+      '/Waning_Crescent.svg'
     ];
     
     let loadedCount = 0;
     const images: HTMLImageElement[] = [];
     
+    // Load SVGs directly as images (simpler and more reliable)
     moonPhaseFiles.forEach((file, index) => {
       const img = new Image();
       img.onload = () => {
         loadedCount++;
-        console.log(`Loaded ${file} (${loadedCount}/${moonPhaseFiles.length})`);
+        console.log(`✓ Loaded moon phase ${index}: ${file} (${loadedCount}/${moonPhaseFiles.length})`);
         if (loadedCount === moonPhaseFiles.length) {
-          console.log('All moon phase images loaded!');
+          console.log('✓ All moon phase images loaded successfully!');
           setMoonImagesLoaded(true);
         }
       };
       img.onerror = (e) => {
-        console.error(`Failed to load ${file}:`, e);
+        console.error(`✗ Failed to load ${file}:`, e);
+        console.error(`  Attempted path: ${img.src}`);
+        console.error(`  Make sure the SVG files are in your public folder!`);
       };
-      img.src = `/${file}`;
+      img.src = file;
       images[index] = img;
     });
     
     moonPhaseImagesRef.current = images;
+    
+    // Also log after a delay to see final status
+    setTimeout(() => {
+      console.log(`Final status: ${loadedCount}/${moonPhaseFiles.length} images loaded`);
+      console.log('moonImagesLoaded state:', moonImagesLoaded);
+    }, 2000);
   }, []);
 
   function getMoonPhaseAngle(date: Date) {
@@ -433,33 +444,47 @@ export default function Home() {
       ctx.arc(c, y, rr, 0, Math.PI * 2);
       ctx.clip();
       
+      // Check if images are actually ready (not just state)
+      const imagesReady = moonPhaseImagesRef.current.length === 8 && 
+                         moonPhaseImagesRef.current.every(img => img && img.complete && img.naturalWidth > 0);
+      
       // Get and draw the appropriate moon phase SVG if images are loaded
-      if (moonImagesLoaded && moonPhaseImagesRef.current.length > 0) {
+      if (imagesReady) {
         const phaseIndex = getMoonPhaseImage(moonAge);
         const moonPhaseImg = moonPhaseImagesRef.current[phaseIndex];
         
-        // Debug: log once per second (not every frame)
-        if (Math.floor(date.getTime() / 1000) % 10 === 0) {
-          console.log(`Moon age: ${moonAge.toFixed(2)} days, Phase index: ${phaseIndex}`);
-        }
-        
         // Draw the SVG centered in the aperture
-        // SVG is 90x90px, aperture diameter is ~85px at r=240
         const moonSize = rr * 2; // Match aperture diameter
         
-        if (moonPhaseImg && moonPhaseImg.complete) {
-          ctx.drawImage(
-            moonPhaseImg,
-            c - rr,      // x position (centered)
-            y - rr,      // y position (centered)
-            moonSize,    // width
-            moonSize     // height
-          );
-        }
+        ctx.drawImage(
+          moonPhaseImg,
+          c - rr,      // x position (centered)
+          y - rr,      // y position (centered)
+          moonSize,    // width
+          moonSize     // height
+        );
       } else {
-        // Fallback: draw simple blue circle if images not loaded
-        ctx.fillStyle = "#1e3a8a";
+        // Fallback: draw colored circle based on status
+        if (moonPhaseImagesRef.current.length === 0) {
+          ctx.fillStyle = "#1e3a8a"; // Dark blue: no images at all
+        } else if (moonPhaseImagesRef.current.length < 8) {
+          ctx.fillStyle = "#f59e0b"; // Orange: partial load
+        } else {
+          ctx.fillStyle = "#10b981"; // Green: images exist but not ready
+        }
         ctx.fill();
+        
+        // Log once per 5 seconds
+        if (Math.floor(date.getTime() / 1000) % 5 === 0) {
+          console.log('Moon images status:', {
+            stateLoaded: moonImagesLoaded,
+            arrayCount: moonPhaseImagesRef.current.length,
+            imagesReady,
+            moonAge: moonAge.toFixed(2),
+            firstImageComplete: moonPhaseImagesRef.current[0]?.complete,
+            firstImageWidth: moonPhaseImagesRef.current[0]?.naturalWidth
+          });
+        }
       }
       
       ctx.restore();
